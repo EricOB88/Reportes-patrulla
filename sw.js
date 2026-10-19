@@ -1,4 +1,4 @@
-const CACHE = 'recorrido-v3';
+const CACHE = 'recorrido-v4';
 const CORE = [
   './',
   './index.html',

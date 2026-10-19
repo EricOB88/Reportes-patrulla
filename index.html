@@ -5,44 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Informe de recorrido</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#1c2b3a">
+<meta name="theme-color" id="themecolor" content="#0a2a66">
+<script>try{var t=localStorage.getItem("tema-recorrido");if(!t)t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="light"}</script>
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous">
 <style>
-:root{--ink:#1c2b3a;--paper:#f3f5f7;--card:#fff;--line:#d5dbe1;--route:#d63a2f;--go:#1f8a4c;--mid:#2b5d8c;--muted:#5d6b78}
+:root{--bg:#fff;--card:#fff;--ink:#000;--muted:#1b2a47;--line:#0a2a66;--accent:#0a2a66;--accent-ink:#fff;--btn-line:#0a2a66;--danger:#b00020;--route:#d63a2f;--go:#0b7a3b;--mid:#1d4ed8;--field:#fff;color-scheme:light}
+:root[data-theme=dark]{--bg:#000;--card:#000;--ink:#fff;--muted:#bccbea;--line:#26478a;--accent:#0b3a8c;--accent-ink:#fff;--btn-line:#5b8be0;--danger:#ff7a85;--go:#2fbf71;--mid:#4d8dff;--field:#04080f;color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0}
-body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--paper);color:var(--ink);padding-bottom:env(safe-area-inset-bottom,0)}
-header{background:var(--ink);color:#fff;padding:calc(14px + env(safe-area-inset-top,0)) 16px 14px}
-header h1{margin:0;font-size:20px;font-weight:700}
+body{font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:env(safe-area-inset-bottom,0)}
+header{background:var(--accent);color:var(--accent-ink);padding:calc(12px + env(safe-area-inset-top,0)) 14px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+header h1{margin:0;font-size:21px;font-weight:800}
+#tema{width:42px;height:42px;padding:0;border-radius:50%;font-size:22px;line-height:1;background:transparent;color:var(--accent-ink);border:2px solid var(--accent-ink)}
 main{max-width:720px;margin:0 auto;padding:12px}
-section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
-h2{font-size:16px;margin:0 0 10px}
+section{background:var(--card);border:2px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
+h2{font-size:18px;margin:0 0 10px;font-weight:800}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .full{grid-column:1/-1}
-label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
-input,textarea{width:100%;font:inherit;color:var(--ink);padding:10px;border:1px solid var(--line);border-radius:6px;background:#fff}
-input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--mid);outline-offset:1px}
+label{display:block;font-size:14px;font-weight:700;color:var(--muted);margin-bottom:3px}
+input,textarea{width:100%;font:inherit;font-weight:500;color:var(--ink);padding:10px;border:2px solid var(--line);border-radius:6px;background:var(--field)}
+input::placeholder{color:var(--muted);opacity:.8}
+input:focus,textarea:focus,button:focus-visible{outline:3px solid var(--mid);outline-offset:1px}
 textarea{min-height:220px;resize:vertical}
 .row{display:flex;gap:8px;margin-bottom:8px}
 .row input{flex:1}
-button{font:inherit;font-weight:600;padding:11px 14px;border-radius:6px;border:1px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer}
-button.primary{background:var(--ink);color:#fff}
-button.danger{border-color:var(--route);color:var(--route)}
+button{font:inherit;font-weight:700;padding:11px 14px;border-radius:6px;border:2px solid var(--btn-line);background:var(--card);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--btn-line);color:var(--accent-ink)}
+button.danger{border-color:var(--danger);color:var(--danger)}
 button:disabled{opacity:.5}
 .bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-#map{height:55vh;min-height:320px;border-radius:6px;border:1px solid var(--line);touch-action:none}
-.info{display:flex;justify-content:space-between;font-size:14px;color:var(--muted);margin:0 0 8px}
-.pin{width:26px;height:26px;border-radius:50%;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
-.pin.mid{background:var(--mid)}.pin.first{background:var(--go)}.pin.last{background:var(--route)}
+.mapwrap{position:relative}
+#map{height:55vh;min-height:320px;border-radius:6px;border:2px solid var(--line);touch-action:none;background:#0b1a33}
+.mapbtn{position:absolute;top:10px;right:10px;z-index:1000;padding:7px 11px;font-size:14px;background:var(--card);color:var(--ink);box-shadow:0 1px 5px rgba(0,0,0,.5)}
+.info{display:flex;justify-content:space-between;font-size:15px;font-weight:600;color:var(--muted);margin:0 0 8px}
+.pin{width:26px;height:26px;border-radius:50%;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6)}
+.pin.mid{background:#1d4ed8}.pin.first{background:#0b7a3b}.pin.last{background:#d63a2f}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 .actions button{flex:1;min-width:140px}
-#msg{font-size:14px;color:var(--muted);margin-top:8px;min-height:20px}
+#msg{font-size:15px;font-weight:600;color:var(--muted);margin-top:8px;min-height:20px}
 </style>
 </head>
 <body>
-<header><h1>Informe de recorrido</h1></header>
+<header><h1>Informe de recorrido</h1><button type="button" id="tema" aria-label="Cambiar tema"></button></header>
 <main>
 <section>
   <h2>Datos del recorrido</h2>
@@ -64,7 +70,7 @@ button:disabled{opacity:.5}
 <section>
   <h2>Ruta</h2>
   <p class="info"><span id="npts">0 puntos</span><span id="dist">0.00 km</span></p>
-  <div id="map"></div>
+  <div class="mapwrap"><div id="map"></div><button type="button" id="vista" class="mapbtn"></button></div>
   <div class="bar">
     <button type="button" id="undo">Deshacer último punto</button>
     <button type="button" id="locate">Mi ubicación</button>
@@ -97,12 +103,45 @@ const KEY = 'informe-recorrido-v1';
 let points = [];
 let markers = [];
 
+/* ---------- Tema ---------- */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('tema').textContent = t === 'dark' ? '☀' : '☾';
+  $('tema').setAttribute('aria-label', t === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro');
+  $('themecolor').content = t === 'dark' ? '#000000' : '#0a2a66';
+}
+$('tema').onclick = () => {
+  const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(t);
+  try { localStorage.setItem('tema-recorrido', t); } catch (e) {}
+};
+applyTheme(document.documentElement.dataset.theme || 'light');
+
 /* ---------- Mapa ---------- */
-const map = L.map('map').setView([9.93, -84.08], 8);
-const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+const map = L.map('map', {maxZoom: 19}).setView([9.93, -84.08], 8);
+const baseSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, maxNativeZoom: 18, crossOrigin: true, attribution: 'Imagen © Esri, Maxar, Earthstar Geographics'
+});
+const labelsSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, maxNativeZoom: 18, crossOrigin: true
+});
+const baseOsm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap'
-}).addTo(map);
-const line = L.polyline([], {color: '#d63a2f', weight: 5, opacity: .9}).addTo(map);
+});
+let vista = 'sat';
+try { vista = localStorage.getItem('vista-recorrido') === 'calles' ? 'calles' : 'sat'; } catch (e) {}
+function setVista(v) {
+  vista = v;
+  [baseSat, labelsSat, baseOsm].forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+  if (v === 'sat') { baseSat.addTo(map); labelsSat.addTo(map); } else baseOsm.addTo(map);
+  $('vista').textContent = v === 'sat' ? 'Ver calles' : 'Ver satélite';
+  try { localStorage.setItem('vista-recorrido', v); } catch (e) {}
+}
+$('vista').onclick = () => setVista(vista === 'sat' ? 'calles' : 'sat');
+setVista(vista);
+const casing = L.polyline([], {color: '#ffffff', weight: 9, opacity: .85}).addTo(map);
+const line = L.polyline([], {color: '#d63a2f', weight: 5, opacity: 1}).addTo(map);
+function setLine() { casing.setLatLngs(points); line.setLatLngs(points); }
 const markerLayer = L.layerGroup().addTo(map);
 let me = null;
 
@@ -117,10 +156,10 @@ function render() {
   markerLayer.clearLayers();
   points.forEach((p, i) => {
     const m = L.marker(p, {icon: pinIcon(i, points.length), draggable: true}).addTo(markerLayer);
-    m.on('drag', e => { const ll = e.target.getLatLng(); points[i] = [ll.lat, ll.lng]; line.setLatLngs(points); updateInfo(); });
+    m.on('drag', e => { const ll = e.target.getLatLng(); points[i] = [ll.lat, ll.lng]; setLine(); updateInfo(); });
     m.on('dragend', save);
   });
-  line.setLatLngs(points);
+  setLine();
   updateInfo();
 }
 
@@ -378,19 +417,24 @@ async function buildJpg() {
   ctx.save();
   ctx.beginPath(); ctx.rect(P, my, IW, MH); ctx.clip();
   ctx.fillStyle = '#e8ecef'; ctx.fillRect(P, my, IW, MH);
-  const conts = [...mapEl.querySelectorAll('.leaflet-tile-pane .leaflet-tile-container')]
-    .sort((a, b) => (+a.style.zIndex || 0) - (+b.style.zIndex || 0));
-  conts.forEach(cont => cont.querySelectorAll('img.leaflet-tile').forEach(img => {
-    if (!img.complete || !img.naturalWidth) return;
-    const b = img.getBoundingClientRect();
-    ctx.drawImage(img, P + (b.left - r.left) * s, my + (b.top - r.top) * s, b.width * s + 1, b.height * s + 1);
-  }));
+  mapEl.querySelectorAll('.leaflet-tile-pane .leaflet-layer').forEach(layer => {
+    const conts = [...layer.querySelectorAll('.leaflet-tile-container')]
+      .sort((x, y) => (+x.style.zIndex || 0) - (+y.style.zIndex || 0));
+    ctx.globalAlpha = layer.style.opacity === '' ? 1 : parseFloat(layer.style.opacity);
+    conts.forEach(cont => cont.querySelectorAll('img.leaflet-tile').forEach(img => {
+      if (!img.complete || !img.naturalWidth) return;
+      const b = img.getBoundingClientRect();
+      ctx.drawImage(img, P + (b.left - r.left) * s, my + (b.top - r.top) * s, b.width * s + 1, b.height * s + 1);
+    }));
+    ctx.globalAlpha = 1;
+  });
   const proj = p => { const q = map.latLngToContainerPoint(p); return [P + q.x * s, my + q.y * s]; };
   if (points.length > 1) {
-    ctx.strokeStyle = '#d63a2f'; ctx.lineWidth = 5 * s; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
     points.forEach((p, i) => { const [x, yy] = proj(p); i ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); });
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 9 * s; ctx.stroke();
+    ctx.strokeStyle = '#d63a2f'; ctx.lineWidth = 5 * s; ctx.stroke();
   }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   points.forEach((p, i) => {
@@ -428,7 +472,7 @@ async function buildJpg() {
 
   ctx.fillStyle = '#5d6b78'; ctx.font = '20px sans-serif';
   const now = new Date();
-  ctx.fillText(`Generado ${now.toLocaleString('es-CR')} · Mapa © OpenStreetMap`, P, H - 22);
+  ctx.fillText(`Generado ${now.toLocaleString('es-CR')} · ` + (vista === 'sat' ? 'Imagen © Esri, Maxar, Earthstar Geographics · Direcciones © OpenStreetMap' : 'Mapa y direcciones © OpenStreetMap'), P, H - 22);
 
   return new Promise((res, rej) => {
     try { c.toBlob(b => b ? res(b) : rej(new Error('vacío')), 'image/jpeg', 0.92); } catch (e) { rej(e); }
