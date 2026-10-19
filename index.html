@@ -230,12 +230,37 @@ function wrap(ctx, text, maxW) {
   });
   return out;
 }
+async function geocode(p) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 7000);
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=es&lat=${p[0]}&lon=${p[1]}`, {signal: ac.signal});
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.display_name || null;
+  } catch (e) { return null; }
+  finally { clearTimeout(t); }
+}
+const fmtCoord = p => `${p[0].toFixed(5)}, ${p[1].toFixed(5)}`;
 function fmtFecha(v) { if (!v) return '—'; const [y, m, d] = v.split('-'); return `${d}/${m}/${y}`; }
 
 async function buildJpg() {
   if (points.length > 1) map.fitBounds(L.latLngBounds(points), {padding: [30, 30], animate: false});
   else if (points.length === 1) map.setView(points[0], 16, {animate: false});
   await waitTiles();
+
+  const locs = [];
+  if (points.length) {
+    const sel = points.length === 1
+      ? [['Punto', points[0]]]
+      : [['Inicio', points[0]], ['Fin', points[points.length - 1]]];
+    setMsg('Buscando dirección aproximada...');
+    for (let i = 0; i < sel.length; i++) {
+      if (i) await sleep(1100);
+      locs.push({label: sel[i][0], addr: await geocode(sel[i][1]), coords: fmtCoord(sel[i][1])});
+    }
+    setMsg('Generando imagen...');
+  }
 
   const W = 1200, P = 40, IW = W - P * 2;
   const mapEl = $('map'), r = mapEl.getBoundingClientRect();
@@ -256,7 +281,10 @@ async function buildJpg() {
   const hInfo = pairs.length * ROW + 30 + asisLines.length * LH + 20;
   const hMap = 56 + MH + 24;
   const hNotes = 56 + noteLines.length * LH + 24;
-  const H = HEAD + 24 + hInfo + hMap + hNotes + 56;
+  measure.font = '24px sans-serif';
+  locs.forEach(l => { l.lines = wrap(measure, l.addr || 'Dirección no disponible (sin conexión)', IW); });
+  const hLoc = locs.reduce((a, l) => a + 34 + l.lines.length * 30 + 32 + 14, 0);
+  const H = HEAD + 24 + hInfo + hMap + hLoc + hNotes + 56;
 
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
@@ -325,6 +353,17 @@ async function buildJpg() {
   ctx.strokeStyle = '#d5dbe1'; ctx.lineWidth = 2; ctx.strokeRect(P, my, IW, MH);
 
   y = my + MH + 24;
+  locs.forEach(l => {
+    ctx.fillStyle = '#1c2b3a'; ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(l.label, P, y + 26);
+    let yy = y + 34;
+    ctx.font = '24px sans-serif';
+    ctx.fillStyle = l.addr ? '#1c2b3a' : '#5d6b78';
+    l.lines.forEach(t => { ctx.fillText(t, P, yy + 22); yy += 30; });
+    ctx.fillStyle = '#5d6b78';
+    ctx.fillText('Coordenadas: ' + l.coords, P, yy + 22);
+    y = yy + 32 + 14;
+  });
   ctx.strokeStyle = '#d5dbe1';
   ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke();
   ctx.fillStyle = '#1c2b3a'; ctx.font = 'bold 30px sans-serif';

@@ -1,4 +1,4 @@
-const CACHE = 'recorrido-v1';
+const CACHE = 'recorrido-v2';
 const CORE = [
   './',
   './index.html',
@@ -27,6 +27,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).hostname.includes('nominatim')) return;
   e.respondWith(
     caches.match(e.request).then(hit => {
       if (hit) return hit;
