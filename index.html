@@ -234,14 +234,68 @@ async function geocode(p) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), 7000);
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=es&lat=${p[0]}&lon=${p[1]}`, {signal: ac.signal});
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&accept-language=es&lat=${p[0]}&lon=${p[1]}`, {signal: ac.signal});
     if (!r.ok) return null;
     const j = await r.json();
-    return j.display_name || null;
+    return j.address || null;
   } catch (e) { return null; }
   finally { clearTimeout(t); }
 }
 const fmtCoord = p => `${p[0].toFixed(5)}, ${p[1].toFixed(5)}`;
+
+function routePointAt(fr) {
+  if (points.length === 1) return points[0];
+  const segs = []; let tot = 0;
+  for (let i = 1; i < points.length; i++) { const d = map.distance(points[i - 1], points[i]); segs.push(d); tot += d; }
+  if (!tot) return points[0];
+  let t = fr * tot;
+  for (let i = 0; i < segs.length; i++) {
+    if (t <= segs[i] || i === segs.length - 1) {
+      const k = segs[i] ? Math.min(1, t / segs[i]) : 0, a = points[i], b = points[i + 1];
+      return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+    }
+    t -= segs[i];
+  }
+}
+function parseAddr(a) {
+  const first = keys => { for (const k of keys) if (a[k]) return a[k]; return ''; };
+  const provincia = (a.state || a.region || '').replace(/^provincia\s+(de\s+)?/i, '').trim();
+  let canton = (a.county || '').replace(/^cant[oó]n\s+(de\s+)?/i, '').trim();
+  const barrio = first(['neighbourhood', 'quarter', 'hamlet', 'suburb']);
+  let distrito = first(['city_district', 'municipality', 'town', 'village']);
+  if (!distrito && a.suburb && a.suburb !== barrio) distrito = a.suburb;
+  if (!canton) canton = a.city || '';
+  else if (!distrito && a.city && a.city !== canton) distrito = a.city;
+  distrito = distrito.replace(/^distrito\s+(de\s+)?/i, '').trim();
+  return {barrio, distrito, canton, provincia};
+}
+const uniq = arr => arr.filter((v, i) => v && arr.indexOf(v) === i);
+function rango(list) {
+  if (!list.length) return '';
+  if (list.length === 1) return list[0];
+  const mid = list.slice(1, -1);
+  return `de ${list[0]} a ${list[list.length - 1]}` + (mid.length ? ` (pasando por ${mid.join(', ')})` : '');
+}
+async function describeRoute() {
+  const km = totalKm();
+  const n = points.length === 1 ? 1 : Math.max(2, Math.min(7, Math.ceil(km / 1.5) + 1));
+  const res = [];
+  for (let i = 0; i < n; i++) {
+    setMsg(`Buscando ubicación de la ruta (${i + 1}/${n})...`);
+    if (i) await sleep(1100);
+    const a = await geocode(routePointAt(n === 1 ? 0 : i / (n - 1)));
+    if (a) res.push(parseAddr(a));
+  }
+  setMsg('Generando imagen...');
+  return {
+    coords: fmtCoord(routePointAt(0.5)),
+    found: res.length > 0,
+    barrio: rango(uniq(res.map(r => r.barrio))),
+    distrito: rango(uniq(res.map(r => r.distrito))),
+    canton: rango(uniq(res.map(r => r.canton))),
+    provincia: rango(uniq(res.map(r => r.provincia)))
+  };
+}
 function fmtFecha(v) { if (!v) return '—'; const [y, m, d] = v.split('-'); return `${d}/${m}/${y}`; }
 
 async function buildJpg() {
@@ -249,18 +303,7 @@ async function buildJpg() {
   else if (points.length === 1) map.setView(points[0], 16, {animate: false});
   await waitTiles();
 
-  const locs = [];
-  if (points.length) {
-    const sel = points.length === 1
-      ? [['Punto', points[0]]]
-      : [['Inicio', points[0]], ['Fin', points[points.length - 1]]];
-    setMsg('Buscando dirección aproximada...');
-    for (let i = 0; i < sel.length; i++) {
-      if (i) await sleep(1100);
-      locs.push({label: sel[i][0], addr: await geocode(sel[i][1]), coords: fmtCoord(sel[i][1])});
-    }
-    setMsg('Generando imagen...');
-  }
+  const info = points.length ? await describeRoute() : null;
 
   const W = 1200, P = 40, IW = W - P * 2;
   const mapEl = $('map'), r = mapEl.getBoundingClientRect();
@@ -282,8 +325,18 @@ async function buildJpg() {
   const hMap = 56 + MH + 24;
   const hNotes = 56 + noteLines.length * LH + 24;
   measure.font = '24px sans-serif';
-  locs.forEach(l => { l.lines = wrap(measure, l.addr || 'Dirección no disponible (sin conexión)', IW); });
-  const hLoc = locs.reduce((a, l) => a + 34 + l.lines.length * 30 + 32 + 14, 0);
+  const locRows = [];
+  if (info) {
+    locRows.push(['Coordenadas', info.coords]);
+    if (info.found && (info.barrio || info.distrito || info.canton || info.provincia)) {
+      if (info.barrio) locRows.push(['Sector/barrio', info.barrio]);
+      if (info.distrito) locRows.push(['Distrito', info.distrito]);
+      if (info.canton) locRows.push(['Cantón', info.canton]);
+      if (info.provincia) locRows.push(['Provincia', info.provincia]);
+    } else locRows.push(['Ubicación', 'No disponible (sin conexión)']);
+  }
+  const rows = locRows.map(([label, text]) => ({label, lines: wrap(measure, text, IW - 230)}));
+  const hLoc = rows.length ? 44 + rows.reduce((a, r) => a + r.lines.length * 30 + 6, 0) + 14 : 0;
   const H = HEAD + 24 + hInfo + hMap + hLoc + hNotes + 56;
 
   const c = document.createElement('canvas');
@@ -353,17 +406,19 @@ async function buildJpg() {
   ctx.strokeStyle = '#d5dbe1'; ctx.lineWidth = 2; ctx.strokeRect(P, my, IW, MH);
 
   y = my + MH + 24;
-  locs.forEach(l => {
-    ctx.fillStyle = '#1c2b3a'; ctx.font = 'bold 26px sans-serif';
-    ctx.fillText(l.label, P, y + 26);
-    let yy = y + 34;
-    ctx.font = '24px sans-serif';
-    ctx.fillStyle = l.addr ? '#1c2b3a' : '#5d6b78';
-    l.lines.forEach(t => { ctx.fillText(t, P, yy + 22); yy += 30; });
-    ctx.fillStyle = '#5d6b78';
-    ctx.fillText('Coordenadas: ' + l.coords, P, yy + 22);
-    y = yy + 32 + 14;
-  });
+  if (rows.length) {
+    ctx.fillStyle = '#1c2b3a'; ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('Ubicación aproximada de la ruta', P, y + 28);
+    y += 44;
+    rows.forEach(r => {
+      ctx.font = 'bold 24px sans-serif'; ctx.fillStyle = '#5d6b78';
+      ctx.fillText(r.label, P, y + 22);
+      ctx.font = '24px sans-serif'; ctx.fillStyle = '#1c2b3a';
+      r.lines.forEach((t, i) => ctx.fillText(t, P + 230, y + 22 + i * 30));
+      y += r.lines.length * 30 + 6;
+    });
+    y += 14;
+  }
   ctx.strokeStyle = '#d5dbe1';
   ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke();
   ctx.fillStyle = '#1c2b3a'; ctx.font = 'bold 30px sans-serif';
