@@ -480,8 +480,11 @@ async function buildJpg() {
 }
 
 function fileName() {
-  const f = $('fecha').value || 'sin-fecha', h = ($('hora').value || '').replace(':', '');
-  return `informe-recorrido-${f}${h ? '-' + h : ''}.jpg`;
+  const limpio = t => t.trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_');
+  const d = limpio($('distrito').value) || 'SinDistrito';
+  const f = $('fecha').value || 'sin-fecha';
+  const h = ($('hora').value || 'sin-hora').replace(':', '');
+  return `${d}-${f}-${h}.jpg`;
 }
 
 async function exportar(modo) {
