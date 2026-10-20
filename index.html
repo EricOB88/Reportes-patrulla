@@ -36,8 +36,19 @@ button.primary{background:var(--accent);border-color:var(--btn-line);color:var(-
 button.danger{border-color:var(--danger);color:var(--danger)}
 button:disabled{opacity:.5}
 .bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.mapwrap{position:relative}
-#map{height:55vh;min-height:320px;border-radius:6px;border:2px solid var(--line);touch-action:none;background:#0b1a33}
+[hidden]{display:none!important}
+.mapwrap{position:relative;border:2px solid var(--line);border-radius:8px;overflow:hidden}
+#map{height:55vh;min-height:320px;touch-action:none;background:#0b1a33}
+#draw{position:absolute;left:0;top:0;z-index:450;pointer-events:none}
+.drawing #draw{pointer-events:auto;touch-action:none;cursor:crosshair}
+.drawing .leaflet-marker-icon{pointer-events:none!important}
+.pinsvg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+.tools{margin-top:10px;padding:10px;border:2px dashed var(--line);border-radius:8px}
+.seg,.colors{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.seg button{flex:1}
+button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--btn-line)}
+.sw{width:44px;height:44px;border-radius:50%;padding:0;border:3px solid var(--btn-line)}
+.sw.on{outline:4px solid var(--mid);outline-offset:2px;border-color:var(--ink)}
 .mapbtn{position:absolute;top:10px;right:10px;z-index:1000;padding:7px 11px;font-size:14px;background:var(--card);color:var(--ink);box-shadow:0 1px 5px rgba(0,0,0,.5)}
 .info{display:flex;justify-content:space-between;font-size:15px;font-weight:600;color:var(--muted);margin:0 0 8px}
 .pin{width:26px;height:26px;border-radius:50%;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6)}
@@ -69,14 +80,34 @@ button:disabled{opacity:.5}
 
 <section>
   <h2>Ruta</h2>
-  <p class="info"><span id="npts">0 puntos</span><span id="dist">0.00 km</span></p>
-  <div class="mapwrap"><div id="map"></div><button type="button" id="vista" class="mapbtn"></button></div>
+  <p class="info"><span id="npts">0 pines</span><span id="dist">0.00 km</span></p>
+  <div class="mapwrap"><div id="map"></div><canvas id="draw"></canvas><button type="button" id="vista" class="mapbtn"></button></div>
   <div class="bar">
-    <button type="button" id="undo">Deshacer último punto</button>
+    <button type="button" id="undo">Deshacer último pin</button>
     <button type="button" id="locate">Mi ubicación</button>
     <button type="button" id="clear" class="danger">Borrar ruta</button>
   </div>
-  <p class="info" style="margin-top:8px">Toca el mapa para agregar puntos. Arrastra un punto para moverlo.</p>
+  <div class="bar">
+    <button type="button" id="dibujar">✎ Dibujar</button>
+    <button type="button" id="undoDib">Deshacer dibujo</button>
+    <button type="button" id="clearDib" class="danger">Borrar dibujos</button>
+  </div>
+  <div class="tools" id="tools" hidden>
+    <div class="seg" role="group" aria-label="Herramienta">
+      <button type="button" data-tool="libre" class="on">Libre</button>
+      <button type="button" data-tool="flecha">Flecha</button>
+      <button type="button" data-tool="circulo">Círculo</button>
+    </div>
+    <div class="colors" role="group" aria-label="Color">
+      <button type="button" class="sw on" data-color="#ffd60a" style="background:#ffd60a" aria-label="Amarillo"></button>
+      <button type="button" class="sw" data-color="#00e5ff" style="background:#00e5ff" aria-label="Cian"></button>
+      <button type="button" class="sw" data-color="#ffffff" style="background:#ffffff" aria-label="Blanco"></button>
+      <button type="button" class="sw" data-color="#ff2bd6" style="background:#ff2bd6" aria-label="Magenta"></button>
+      <button type="button" class="sw" data-color="#ff3b30" style="background:#ff3b30" aria-label="Rojo"></button>
+    </div>
+    <p class="info" style="margin:0">Dibuja con el dedo sobre el mapa. Para mover o acercar el mapa, toca "Terminar dibujo".</p>
+  </div>
+  <p class="info" style="margin-top:8px">Toca el mapa para colocar pines y armar la ruta. Arrastra un pin para moverlo.</p>
 </section>
 
 <section>
@@ -101,6 +132,7 @@ const $ = id => document.getElementById(id);
 const FIELDS = ['fecha','hora','canton','distrito','unidad','chofer','notas'];
 const KEY = 'informe-recorrido-v1';
 let points = [];
+let shapes = [];
 let markers = [];
 
 /* ---------- Tema ---------- */
@@ -147,9 +179,14 @@ let me = null;
 
 map.on('click', e => { points.push([e.latlng.lat, e.latlng.lng]); render(); save(); });
 
+const PIN_PATH = 'M15 39C15 39 2 24 2 14.5A13 13 0 0 1 28 14.5C28 24 15 39 15 39Z';
+const pinColor = (i, n) => i === 0 ? '#0b7a3b' : (i === n - 1 && n > 1 ? '#d63a2f' : '#1d4ed8');
 function pinIcon(i, n) {
-  const cls = i === 0 ? 'first' : (i === n - 1 && n > 1 ? 'last' : 'mid');
-  return L.divIcon({className: '', html: `<div class="pin ${cls}">${i + 1}</div>`, iconSize: [26, 26], iconAnchor: [13, 13]});
+  return L.divIcon({
+    className: '',
+    html: `<svg class="pinsvg" width="30" height="40" viewBox="0 0 30 40"><path d="${PIN_PATH}" fill="${pinColor(i, n)}" stroke="#fff" stroke-width="2"/><circle cx="15" cy="14.5" r="5" fill="#fff"/></svg>`,
+    iconSize: [30, 40], iconAnchor: [15, 39]
+  });
 }
 
 function render() {
@@ -161,6 +198,7 @@ function render() {
   });
   setLine();
   updateInfo();
+  redraw();
 }
 
 function totalKm() {
@@ -169,12 +207,12 @@ function totalKm() {
   return d / 1000;
 }
 function updateInfo() {
-  $('npts').textContent = points.length + (points.length === 1 ? ' punto' : ' puntos');
+  $('npts').textContent = points.length + (points.length === 1 ? ' pin' : ' pines');
   $('dist').textContent = totalKm().toFixed(2) + ' km';
 }
 
 $('undo').onclick = () => { points.pop(); render(); save(); };
-$('clear').onclick = () => { if (points.length && confirm('¿Borrar todos los puntos de la ruta?')) { points = []; render(); save(); } };
+$('clear').onclick = () => { if (points.length && confirm('¿Borrar todos los pines de la ruta?')) { points = []; render(); save(); } };
 $('locate').onclick = () => { setMsg('Buscando ubicación...'); map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true}); };
 map.on('locationfound', e => {
   if (me) me.remove();
@@ -182,6 +220,116 @@ map.on('locationfound', e => {
   setMsg('');
 });
 map.on('locationerror', () => setMsg('No se pudo obtener la ubicación. Revisa el permiso de ubicación del navegador.'));
+
+/* ---------- Dibujo sobre el mapa ---------- */
+const cv = $('draw'), cx = cv.getContext('2d');
+let drawing = false, tool = 'libre', dcolor = '#ffd60a', temp = null, startPt = null, lastPt = null, curPt = null, rq = 0;
+
+function paintShapes(ctx, list, proj, k) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  list.forEach(sh => {
+    const w = 5 * k;
+    const stroke = fn => {
+      ctx.beginPath(); fn(); ctx.strokeStyle = 'rgba(0,0,0,.65)'; ctx.lineWidth = w + 4 * k; ctx.stroke();
+      ctx.beginPath(); fn(); ctx.strokeStyle = sh.c; ctx.lineWidth = w; ctx.stroke();
+    };
+    if (sh.t === 'libre') {
+      const pts = sh.p.map(proj);
+      if (pts.length < 2) return;
+      stroke(() => pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
+    } else if (sh.t === 'circulo') {
+      const o = proj(sh.o), e = proj(sh.e), r = Math.hypot(e[0] - o[0], e[1] - o[1]);
+      if (r < 1) return;
+      stroke(() => ctx.arc(o[0], o[1], r, 0, Math.PI * 2));
+    } else if (sh.t === 'flecha') {
+      const a = proj(sh.a), b = proj(sh.b);
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1) return;
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), hl = 22 * k;
+      const bx = b[0] - Math.cos(ang) * hl * 0.7, by = b[1] - Math.sin(ang) * hl * 0.7;
+      stroke(() => { ctx.moveTo(a[0], a[1]); ctx.lineTo(bx, by); });
+      ctx.beginPath();
+      ctx.moveTo(b[0], b[1]);
+      ctx.lineTo(b[0] - hl * Math.cos(ang - 0.45), b[1] - hl * Math.sin(ang - 0.45));
+      ctx.lineTo(b[0] - hl * Math.cos(ang + 0.45), b[1] - hl * Math.sin(ang + 0.45));
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(0,0,0,.65)'; ctx.lineWidth = 4 * k; ctx.stroke();
+      ctx.fillStyle = sh.c; ctx.fill();
+    }
+  });
+}
+const projScreen = ll => { const q = map.latLngToContainerPoint(ll); return [q.x, q.y]; };
+function paint() {
+  const z = map.getSize(), dpr = window.devicePixelRatio || 1;
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cx.clearRect(0, 0, z.x, z.y);
+  paintShapes(cx, temp ? shapes.concat([temp]) : shapes, projScreen, 1);
+}
+function redraw() { if (rq) return; rq = requestAnimationFrame(() => { rq = 0; paint(); }); }
+function sizeCanvas() {
+  const z = map.getSize(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(z.x * dpr); cv.height = Math.round(z.y * dpr);
+  cv.style.width = z.x + 'px'; cv.style.height = z.y + 'px';
+  paint();
+}
+map.on('move zoom zoomend viewreset resize', redraw);
+new ResizeObserver(() => { map.invalidateSize(); sizeCanvas(); }).observe($('map'));
+
+const evPt = e => { const r = cv.getBoundingClientRect(); return L.point(e.clientX - r.left, e.clientY - r.top); };
+const toLL = pt => { const ll = map.containerPointToLatLng(pt); return [ll.lat, ll.lng]; };
+cv.addEventListener('pointerdown', e => {
+  if (!drawing) return;
+  e.preventDefault(); cv.setPointerCapture(e.pointerId);
+  const pt = evPt(e), ll = toLL(pt);
+  startPt = lastPt = curPt = pt;
+  temp = tool === 'libre' ? {t: 'libre', c: dcolor, p: [ll]}
+       : tool === 'flecha' ? {t: 'flecha', c: dcolor, a: ll, b: ll}
+       : {t: 'circulo', c: dcolor, o: ll, e: ll};
+  paint();
+});
+cv.addEventListener('pointermove', e => {
+  if (!temp) return;
+  const pt = evPt(e), ll = toLL(pt);
+  curPt = pt;
+  if (temp.t === 'libre') { if (pt.distanceTo(lastPt) > 3) { temp.p.push(ll); lastPt = pt; } }
+  else if (temp.t === 'flecha') temp.b = ll;
+  else temp.e = ll;
+  paint();
+});
+function endDraw() {
+  if (!temp) return;
+  const ok = temp.t === 'libre' ? temp.p.length >= 2 : startPt.distanceTo(curPt) > 8;
+  if (ok) { shapes.push(temp); save(); }
+  temp = null; paint();
+}
+cv.addEventListener('pointerup', endDraw);
+cv.addEventListener('pointercancel', endDraw);
+
+$('dibujar').onclick = () => {
+  drawing = !drawing;
+  $('map').parentElement.classList.toggle('drawing', drawing);
+  $('tools').hidden = !drawing;
+  $('dibujar').classList.toggle('on', drawing);
+  $('dibujar').textContent = drawing ? 'Terminar dibujo' : '✎ Dibujar';
+};
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
+  tool = b.dataset.tool;
+  document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('on', x === b));
+});
+document.querySelectorAll('[data-color]').forEach(b => b.onclick = () => {
+  dcolor = b.dataset.color;
+  document.querySelectorAll('[data-color]').forEach(x => x.classList.toggle('on', x === b));
+});
+$('undoDib').onclick = () => { shapes.pop(); save(); paint(); };
+$('clearDib').onclick = () => { if (shapes.length && confirm('¿Borrar todos los dibujos del mapa?')) { shapes = []; save(); paint(); } };
+function boundsPoints() {
+  const out = points.slice();
+  shapes.forEach(sh => {
+    if (sh.t === 'libre') out.push(...sh.p);
+    else if (sh.t === 'flecha') out.push(sh.a, sh.b);
+    else out.push(sh.o, sh.e, [2 * sh.o[0] - sh.e[0], 2 * sh.o[1] - sh.e[1]]);
+  });
+  return out;
+}
 
 /* ---------- Asistentes ---------- */
 function addAsistente(v = '') {
@@ -206,7 +354,7 @@ $('addAsist').onclick = () => { addAsistente(); $('asistentes').lastChild.firstC
 
 /* ---------- Guardado local ---------- */
 function save() {
-  const d = {points, asistentes: [...$('asistentes').querySelectorAll('input')].map(i => i.value)};
+  const d = {points, shapes, asistentes: [...$('asistentes').querySelectorAll('input')].map(i => i.value)};
   FIELDS.forEach(f => d[f] = $(f).value);
   try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) {}
 }
@@ -216,6 +364,7 @@ function load() {
   if (d) {
     FIELDS.forEach(f => $(f).value = d[f] || '');
     points = d.points || [];
+    shapes = d.shapes || [];
     (d.asistentes && d.asistentes.length ? d.asistentes : ['']).forEach(a => addAsistente(a));
   } else {
     addAsistente();
@@ -234,7 +383,7 @@ $('new').onclick = () => {
   if (!confirm('¿Empezar un informe nuevo? Se borrarán los datos actuales.')) return;
   FIELDS.forEach(f => $(f).value = '');
   $('asistentes').innerHTML = ''; addAsistente();
-  points = []; setNow(); render(); save();
+  points = []; shapes = []; setNow(); render(); save();
 };
 
 /* ---------- Exportar JPG ---------- */
@@ -338,8 +487,9 @@ async function describeRoute() {
 function fmtFecha(v) { if (!v) return '—'; const [y, m, d] = v.split('-'); return `${d}/${m}/${y}`; }
 
 async function buildJpg() {
-  if (points.length > 1) map.fitBounds(L.latLngBounds(points), {padding: [30, 30], animate: false});
-  else if (points.length === 1) map.setView(points[0], 16, {animate: false});
+  const bp = boundsPoints();
+  if (bp.length > 1) map.fitBounds(L.latLngBounds(bp), {padding: [30, 30], maxZoom: 18, animate: false});
+  else if (bp.length === 1) map.setView(bp[0], 16, {animate: false});
   await waitTiles();
 
   const info = points.length ? await describeRoute() : null;
@@ -410,7 +560,7 @@ async function buildJpg() {
   ctx.fillStyle = '#1c2b3a'; ctx.font = 'bold 30px sans-serif';
   ctx.fillText('Mapa del recorrido', P, y + 42);
   ctx.textAlign = 'right'; ctx.font = '26px sans-serif'; ctx.fillStyle = '#5d6b78';
-  ctx.fillText(`${points.length} puntos · ${totalKm().toFixed(2)} km`, W - P, y + 42);
+  ctx.fillText(`${points.length} ${points.length === 1 ? 'pin' : 'pines'} · ${totalKm().toFixed(2)} km`, W - P, y + 42);
   ctx.textAlign = 'left';
   const my = y + 56;
 
@@ -436,15 +586,17 @@ async function buildJpg() {
     ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 9 * s; ctx.stroke();
     ctx.strokeStyle = '#d63a2f'; ctx.lineWidth = 5 * s; ctx.stroke();
   }
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const pinPath = new Path2D(PIN_PATH);
   points.forEach((p, i) => {
-    const [x, yy] = proj(p);
-    ctx.fillStyle = i === 0 ? '#1f8a4c' : (i === points.length - 1 && points.length > 1 ? '#d63a2f' : '#2b5d8c');
-    ctx.beginPath(); ctx.arc(x, yy, 13 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.lineWidth = 2 * s; ctx.strokeStyle = '#fff'; ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.font = `bold ${13 * s}px sans-serif`;
-    ctx.fillText(String(i + 1), x, yy + s);
+    const [x, yy] = proj(p), k = s * 0.8;
+    ctx.save();
+    ctx.translate(x - 15 * k, yy - 39 * k); ctx.scale(k, k);
+    ctx.fillStyle = pinColor(i, points.length); ctx.fill(pinPath);
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(pinPath);
+    ctx.beginPath(); ctx.arc(15, 14.5, 5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.restore();
   });
+  paintShapes(ctx, shapes, proj, s);
   ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.strokeStyle = '#d5dbe1'; ctx.lineWidth = 2; ctx.strokeRect(P, my, IW, MH);
